@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>国六调油</title>
+<style>
+:root{--bg:#12161a;--pn:#1a2026;--p2:#222a32;--ln:#2c3640;--ink:#e9edf0;--i2:#93a0ab;--i3:#5f6b76;
+--oil:#e8a33d;--ok:#3fb970;--bad:#e05555;--mono:Menlo,Consolas,monospace}
+@media (prefers-color-scheme:light){:root{--bg:#f2f0ea;--pn:#fff;--p2:#f6f4ee;--ln:#dcd8ce;--ink:#1c2126;--i2:#5a646d;--i3:#8b959e;--oil:#b06f10}}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,'PingFang SC',sans-serif;padding:12px;max-width:520px;margin:0 auto}
+.top{display:flex;gap:6px;align-items:center;margin-bottom:10px}
+.top b{font-size:16px;margin-right:auto}
+select{height:36px;background:var(--pn);color:var(--ink);border:1px solid var(--ln);border-radius:8px;font-size:13px;padding:0 8px}
+.kpi{display:flex;gap:8px;margin-bottom:6px}
+.kc{flex:1;background:var(--pn);border:1px solid var(--ln);border-radius:10px;padding:8px 10px}
+.kc .l{font-size:10px;color:var(--i2)}
+.kc .v{font-size:19px;font-weight:600;font-family:var(--mono)}
+.kc .v small{font-size:10px;font-weight:400;color:var(--i3)}
+.bind{font-size:11px;color:var(--oil);margin:2px 2px 10px}
+.rbar{margin-bottom:7px}
+.rl{display:flex;justify-content:space-between;font-size:12px;margin-bottom:2px}
+.rl b{font-family:var(--mono)}
+.rt{height:9px;background:var(--p2);border-radius:5px;overflow:hidden}
+.rf{height:100%;border-radius:5px;transition:width .3s}
+h2{font-size:11px;color:var(--i2);letter-spacing:.06em;margin:14px 0 6px;font-weight:600;display:flex;justify-content:space-between;align-items:center}
+.chips{display:flex;flex-wrap:wrap;gap:5px}
+.ch{font-size:11px;padding:3px 8px;border-radius:9px;font-family:var(--mono)}
+.c-ok{background:rgba(63,185,112,.13);color:var(--ok)}
+.c-bad{background:rgba(224,85,85,.15);color:var(--bad)}
+.c-ed{background:rgba(232,163,61,.15);color:var(--oil)}
+input{height:34px;background:var(--p2);color:var(--ink);border:1px solid var(--ln);border-radius:7px;font-size:14px;font-family:var(--mono);padding:0 8px;width:100%}
+input:focus,select:focus{outline:2px solid var(--oil);border-color:transparent}
+details{background:var(--pn);border:1px solid var(--ln);border-radius:10px;margin-bottom:7px;overflow:hidden}
+summary{display:flex;align-items:center;gap:7px;padding:10px 12px;font-size:14px;font-weight:500;cursor:pointer;list-style:none}
+summary::-webkit-details-marker{display:none}
+summary .arr{margin-left:auto;color:var(--i3);font-size:11px;transition:transform .2s}
+details[open] .arr{transform:rotate(90deg)}
+.dot{width:9px;height:9px;border-radius:2px;flex:none}
+.pm{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:0 12px 10px}
+.pm label,.pg label{font-size:10px;color:var(--i2);display:block}
+.pm label input,.pg label input{margin-top:2px}
+.pg{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:10px 12px;border-top:1px dashed var(--ln)}
+.btn{height:30px;padding:0 10px;background:var(--p2);color:var(--i2);border:1px solid var(--ln);border-radius:7px;font-size:11px}
+.fail{display:none;background:rgba(224,85,85,.1);border:1px solid var(--bad);border-radius:8px;padding:8px 10px;font-size:12px;color:var(--bad);margin-bottom:8px}
+.note{font-size:10px;color:var(--i3);line-height:1.6;margin-top:14px}
+</style>
+</head>
+<body>
+<div class="top"><b>国六调油</b>
+<select id="grade"><option value="92" selected>92号</option><option value="95">95号</option></select>
+<select id="season"><option value="s" selected>夏</option><option value="w">冬</option></select>
+</div>
+<div class="fail" id="fail">无可行解：放宽上限或核对化验指标</div>
+<div class="kpi">
+<div class="kc"><div class="l">最优成本</div><div class="v" id="cost">—<small>元/吨</small></div></div>
+<div class="kc"><div class="l">折算</div><div class="v" id="costL">—<small>元/升</small></div></div>
+<div class="kc"><div class="l">密度</div><div class="v" id="dens">—<small>kg/m³</small></div></div>
+</div>
+<div class="bind" id="nbind"></div>
+<div id="recipe"></div>
+<div id="expl" style="font-size:12px;line-height:1.9;color:var(--i2);margin:4px 0 2px"></div>
+<h2>指标校验（黄=卡边）</h2>
+<div class="chips" id="specs"></div>
+<details style="margin-bottom:8px"><summary><span class="dot" style="background:var(--ok)"></span>目标指标（选牌号自动填国六B，可改内控值）<span class="arr">▶</span></summary>
+<div class="pg" style="border-top:none">
+<label>RON ≥<input type="number" id="tron" step="0.1" inputmode="decimal"></label>
+<label>抗爆指数 ≥<input type="number" id="tai" step="0.1" inputmode="decimal"></label>
+<label>烯烃 % ≤<input type="number" id="tole" step="0.5" inputmode="decimal"></label>
+<label>芳烃 % ≤<input type="number" id="taro" step="0.5" inputmode="decimal"></label>
+<label>苯 % ≤<input type="number" id="tbz" step="0.05" inputmode="decimal"></label>
+<label>氧 wt% ≤<input type="number" id="tox" step="0.1" inputmode="decimal"></label>
+<label>硫 ppm ≤<input type="number" id="ts" step="1" inputmode="decimal"></label>
+<label>蒸汽压 ≥<input type="number" id="trlo" step="1" inputmode="decimal"></label>
+<label>蒸汽压 ≤<input type="number" id="trhi" step="1" inputmode="decimal"></label>
+<label>E70 % ≥<input type="number" id="te70" step="1" inputmode="decimal"></label>
+<label>E110 % ≥<input type="number" id="te110" step="1" inputmode="decimal"></label>
+<label>E190 % ≥<input type="number" id="te190" step="1" inputmode="decimal"></label>
+<label>终馏 ℃ ≤<input type="number" id="tfbp" step="1" inputmode="decimal"></label>
+</div></details>
+<details style="margin-bottom:10px"><summary><span class="dot" style="background:var(--oil)"></span>批量导入：粘贴 Excel 表格或化验单文字<span class="arr">▶</span></summary>
+<div style="padding:0 12px 10px">
+<textarea id="imp" rows="6" placeholder="支持三种格式，直接粘贴：
+① 单张化验单（竖表）：一行一个项目，如
+   密度 732.5
+   研究法辛烷值 90.2
+   烯烃 31.0
+② Excel 横表：首行表头（组分 价格 RON 烯烃…），一行一个组分
+③ 速记行：催化汽油 价格6400 RON90.2 烯烃31" style="width:100%;background:var(--p2);color:var(--ink);border:1px solid var(--ln);border-radius:7px;font:12px/1.5 var(--mono);padding:8px"></textarea>
+<div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap">
+<button class="btn" id="impBtn">识别预览</button>
+<span style="font-size:11px;color:var(--i3)">单张化验单没写组分名时，归属于→</span>
+<select id="impTgt" style="height:30px;font-size:12px"></select>
+</div>
+<div id="impPrev" style="margin-top:8px;font-size:12px;line-height:1.9"></div>
+<span id="impMsg" style="font-size:11px;color:var(--i2)"></span>
+</div></details>
+<h2><span>采购决策（价格临界点 · 边际价值）</span><button class="btn" id="ana">开始分析</button></h2>
+<div id="deci" style="font-size:12px;line-height:1.9;color:var(--i2)"></div>
+<h2><span>组分：价格 · 上限 · 本批化验指标（点开填）</span><button class="btn" id="rst">恢复默认</button></h2>
+<div id="inputs"></div>
+<p class="note">每批组分到货后，点开对应组分，按化验单更新指标再看配方——性质不更新，配方无意义。数据自动保存在本机浏览器。近似：辛烷值/蒸发量体积线性调和，蒸汽压RVP^1.25指数法，硫/氧质量基，成本按元/吨迭代；未含辛烷值非线性效应及胶质/诱导期/甲醇/金属（需化验把关）。仅供测算参考。</p>
+<script>
+const DEF=[
+{k:'催化汽油',c:'#4a8fd4',d:730,p:6350,mx:60,ron:90.5,mon:79.5,rvp:52,ole:28,aro:18,bz:.7,s:8,ox:0,e70:32,e110:55,e190:92,fbp:200},
+{k:'重整汽油',c:'#3fa05a',d:780,p:6600,mx:40,ron:101,mon:89.5,rvp:28,ole:.8,aro:65,bz:.9,s:1,ox:0,e70:10,e110:45,e190:95,fbp:195},
+{k:'烷基化油',c:'#d47ba3',d:700,p:7000,mx:30,ron:96,mon:93.5,rvp:42,ole:.2,aro:0,bz:0,s:3,ox:0,e70:6,e110:68,e190:99,fbp:196},
+{k:'MTBE',c:'#e8a33d',d:745,p:6150,mx:15,ron:115,mon:100,rvp:55,ole:0,aro:0,bz:0,s:5,ox:18.2,e70:100,e110:100,e190:100,fbp:55},
+{k:'异构化油',c:'#2fae8f',d:645,p:6400,mx:20,ron:87,mon:85,rvp:95,ole:.3,aro:.5,bz:.1,s:1,ox:0,e70:82,e110:100,e190:100,fbp:78},
+{k:'抽余油',c:'#d4703a',d:680,p:5850,mx:25,ron:68,mon:66,rvp:65,ole:.5,aro:2,bz:.3,s:1,ox:0,e70:45,e110:95,e190:100,fbp:112},
+{k:'混二甲苯',c:'#7b6fd4',d:865,p:6750,mx:15,ron:106,mon:95,rvp:22,ole:0,aro:100,bz:.1,s:1,ox:0,e70:0,e110:2,e190:100,fbp:144},
+{k:'轻石脑油',c:'#c95252',d:655,p:5600,mx:15,ron:72,mon:70,rvp:95,ole:1,aro:2,bz:.5,s:5,ox:0,e70:75,e110:98,e190:100,fbp:115},
+{k:'89号汽油',c:'#8b959e',d:730,p:6250,mx:50,ron:89,mon:84,rvp:58,ole:12,aro:28,bz:.7,s:8,ox:0,e70:35,e110:58,e190:93,fbp:200}];
+const FLD=[['p','价格 元/吨'],['mx','上限 %v'],['d','密度 kg/m³'],['ron','RON'],['mon','MON'],['rvp','蒸汽压 kPa'],['ole','烯烃 %'],['aro','芳烃 %'],['bz','苯 %'],['s','硫 ppm'],['ox','氧 wt%'],['e70','E70 %'],['e110','E110 %'],['e190','E190 %'],['fbp','终馏 ℃']];
+const KEY='ty6v3';
+let V=DEF.map(c=>({...c}));
+try{const sv=JSON.parse(localStorage.getItem(KEY));if(sv&&sv.length===9)V=sv.map((o,i)=>({...DEF[i],...o}));}catch(e){}
+const RI=r=>Math.pow(Math.max(1,r),1.25);
+function lp(c,A,rel,b){
+ const m=A.length,n=c.length;let cs=n;const sl=[],ar=[];
+ rel.forEach((r,i)=>{if(r==='<')sl.push({i,s:1,col:cs++});else if(r==='>'){sl.push({i,s:-1,col:cs++});ar.push({i,col:-1});}else ar.push({i,col:-1});});
+ ar.forEach(a=>a.col=cs++);
+ const M=1e8,T=[];
+ for(let i=0;i<m;i++){const r=new Array(cs+1).fill(0);for(let j=0;j<n;j++)r[j]=A[i][j];r[cs]=b[i];T.push(r);}
+ sl.forEach(s=>T[s.i][s.col]=s.s);ar.forEach(a=>T[a.i][a.col]=1);
+ const bas=new Array(m).fill(-1);
+ sl.forEach(s=>{if(s.s>0)bas[s.i]=s.col;});ar.forEach(a=>bas[a.i]=a.col);
+ const co=new Array(cs).fill(0);for(let j=0;j<n;j++)co[j]=c[j];ar.forEach(a=>co[a.col]=M);
+ const o=new Array(cs+1).fill(0);
+ for(let j=0;j<=cs;j++){let z=0;for(let i=0;i<m;i++)z+=co[bas[i]]*T[i][j];o[j]=z-(j<cs?co[j]:0);}
+ for(let t=0;t<1000;t++){
+  let pc=-1,bv=1e-6;
+  for(let j=0;j<cs;j++)if(o[j]>bv){bv=o[j];pc=j;}
+  if(pc<0)break;
+  let pr=-1,mn=1/0;
+  for(let i=0;i<m;i++)if(T[i][pc]>1e-9){const r=T[i][cs]/T[i][pc];if(r<mn-1e-12){mn=r;pr=i;}}
+  if(pr<0)return null;
+  const pv=T[pr][pc];for(let j=0;j<=cs;j++)T[pr][j]/=pv;
+  for(let i=0;i<m;i++)if(i!==pr&&Math.abs(T[i][pc])>1e-12){const f=T[i][pc];for(let j=0;j<=cs;j++)T[i][j]-=f*T[pr][j];}
+  const f=o[pc];for(let j=0;j<=cs;j++)o[j]-=f*T[pr][j];
+  bas[pr]=pc;
+ }
+ for(let i=0;i<m;i++)if(ar.some(a=>a.col===bas[i])&&T[i][cs]>1e-3)return null;
+ const x=new Array(n).fill(0);
+ for(let i=0;i<m;i++)if(bas[i]<n)x[bas[i]]=T[i][cs];
+ return x;
+}
+const inp=document.getElementById('inputs'),rec=document.getElementById('recipe');
+V.forEach((c,i)=>{
+ rec.insertAdjacentHTML('beforeend',`<div class="rbar" id="rb${i}"><div class="rl"><span>${c.k}</span><b id="rv${i}"></b></div><div class="rt"><div class="rf" id="rf${i}" style="background:${c.c};width:0"></div></div></div>`);
+ const pg=FLD.slice(2).map(([f,lb])=>`<label>${lb}<input type="number" id="q${i}${f}" value="${c[f]}" step="any" inputmode="decimal"></label>`).join('');
+ inp.insertAdjacentHTML('beforeend',`<details><summary><span class="dot" style="background:${c.c}"></span><span id="sn${i}">${c.k}</span><span class="arr">\u25b6</span></summary>
+ <div class="pm"><label>组分名称（按你厂叫法改）<input type="text" id="qk${i}" value="${c.k}" style="font-family:inherit"></label><label>价格 元/吨<input type="number" id="q${i}p" value="${c.p}" step="50" inputmode="numeric"></label></div>
+ <div class="pm" style="padding-top:0"><label>上限 %v<input type="number" id="q${i}mx" value="${c.mx}" min="0" max="100" step="5" inputmode="numeric"></label><label style="visibility:hidden">.</label></div>
+ <div class="pg">${pg}</div></details>`);
+});
+function NM(i){const e=document.getElementById('qk'+i);return (e&&e.value.trim())||DEF[i].k;}
+function syncNames(){V.forEach((c,i)=>{document.getElementById('sn'+i).textContent=NM(i);
+ const rl=document.querySelector('#rb'+i+' .rl span');if(rl)rl.textContent=NM(i);});
+ const sel=document.getElementById('impTgt');const cur=sel.value;
+ sel.innerHTML=V.map((c,i)=>'<option value="'+i+'">'+NM(i)+'</option>').join('');if(cur)sel.value=cur;}
+function G(i,f){const e=document.getElementById('q'+i+f);const v=parseFloat(e&&e.value);return isNaN(v)?DEF[i][f]:v;}
+function coreSolve(P,X,g,sm){
+ const t={ron:T('ron'),ai:T('ai'),ole:T('ole'),aro:T('aro'),bz:T('bz'),ox:T('ox'),s:T('s'),rlo:T('rlo'),rhi:T('rhi'),e70:T('e70'),e110:T('e110'),e190:T('e190')};
+ const D=V.map((c,i)=>G(i,'d')),A=[],R=[],B=[];
+ const add=(row,r,v)=>{A.push(row);R.push(r);B.push(v);};
+ add(V.map(_=>1),'=',100);
+ add(V.map((c,i)=>G(i,'ron')),'>',t.ron*100);
+ add(V.map((c,i)=>(G(i,'ron')+G(i,'mon'))/2),'>',t.ai*100);
+ add(V.map((c,i)=>G(i,'ole')),'<',t.ole*100);
+ add(V.map((c,i)=>G(i,'aro')),'<',t.aro*100);
+ add(V.map((c,i)=>G(i,'bz')),'<',t.bz*100);
+ add(V.map((c,i)=>D[i]*(G(i,'ox')-t.ox)/100),'<',0);
+ add(V.map((c,i)=>D[i]*(G(i,'s')-t.s)/100),'<',0);
+ add(V.map((c,i)=>RI(G(i,'rvp'))),'<',RI(t.rhi)*100);
+ add(V.map((c,i)=>RI(G(i,'rvp'))),'>',RI(t.rlo)*100);
+ add(V.map((c,i)=>G(i,'e70')),'>',t.e70*100);
+ add(V.map((c,i)=>G(i,'e110')),'>',t.e110*100);
+ add(V.map((c,i)=>G(i,'e190')),'>',t.e190*100);
+ V.forEach((c,i)=>{const r=V.map(_=>0);r[i]=1;add(r,'<',X[i]);});
+ let x=null,lam=6500;
+ for(let t=0;t<10;t++){
+  x=lp(V.map((c,i)=>D[i]*(P[i]-lam)/1000),A,R,B);
+  if(!x)return null;
+  const nl=x.reduce((a,v,i)=>a+v*D[i]*P[i],0)/x.reduce((a,v,i)=>a+v*D[i],0);
+  if(Math.abs(nl-lam)<.3){lam=nl;break;}lam=nl;
+ }
+ return {x,cost:lam};
+}
+function analyse(){
+ const g=+grade.value,sm=season.value==='s';
+ const P0=V.map((c,i)=>G(i,'p')),X0=V.map((c,i)=>Math.max(0,G(i,'mx')));
+ const el=document.getElementById('deci');
+ el.innerHTML='计算中…（手机上约需几秒）';
+ setTimeout(()=>{
+  const base=coreSolve(P0,X0,g,sm);
+  if(!base){el.innerHTML='当前无可行解，无法分析';return;}
+  let out='';
+  for(let i=0;i<V.length;i++){
+   if(X0[i]<0.5)continue;
+   const inR=base.x[i]>0.5,step=inR?100:-100;
+   let bd=null;
+   for(let d=step;Math.abs(d)<=2000;d+=step){
+    const P=[...P0];P[i]=P0[i]+d;
+    const r=coreSolve(P,X0,g,sm);
+    if(!r)break;
+    if((r.x[i]>0.5)!==inR){bd=P0[i]+d;break;}
+   }
+   const nm='<span style="color:'+V[i].c+'">\u25cf</span> <b style="color:var(--ink)">'+V[i].k+'</b>';
+   if(inR)out+=nm+'\uff1a\u5728\u7528'+(bd?('\uff0c\u6da8\u5230 <b style="color:var(--bad)">'+bd+'</b> \u9000\u51fa'):'\uff0c\u6da82000\u5185\u4e0d\u9000\uff08\u521a\u9700\uff09');
+   else out+=nm+'\uff1a\u672a\u7528'+(bd?('\uff0c\u8dcc\u5230 <b style="color:var(--ok)">'+bd+'</b> \u503c\u5f97\u4e70\u5165'):'\uff0c\u8dcc2000\u5185\u4ecd\u4e0d\u5212\u7b97');
+   if(inR&&base.x[i]>X0[i]-0.3){
+    const X=[...X0];X[i]=X0[i]+1;
+    const r=coreSolve(P0,X,g,sm);
+    if(r&&base.cost-r.cost>0.5)out+='\uff1b<b style="color:var(--oil)">\u9876\u683c</b>\uff0c\u591a\u8d2d1%\u4e0a\u9650\u7701 '+(base.cost-r.cost).toFixed(1)+' \u5143/\u5428';
+   }
+   out+='<br>';
+  }
+  el.innerHTML=out;
+ },30);
+}
+const TDEF=()=>{const g=+grade.value,sm=season.value==='s';
+ return {ron:g,ai:g===92?87:90,ole:15,aro:35,bz:0.8,ox:2.7,s:10,rlo:sm?40:45,rhi:sm?65:85,e70:10,e110:50,e190:90,fbp:205};};
+function setTgt(){const d=TDEF();[['tron','ron'],['tai','ai'],['tole','ole'],['taro','aro'],['tbz','bz'],['tox','ox'],['ts','s'],['trlo','rlo'],['trhi','rhi'],['te70','e70'],['te110','e110'],['te190','e190'],['tfbp','fbp']].forEach(([id,k])=>{document.getElementById(id).value=d[k];});}
+function T(k){const map={ron:'tron',ai:'tai',ole:'tole',aro:'taro',bz:'tbz',ox:'tox',s:'ts',rlo:'trlo',rhi:'trhi',e70:'te70',e110:'te110',e190:'te190',fbp:'tfbp'};
+ const e=document.getElementById(map[k]);const v=parseFloat(e&&e.value);return isNaN(v)?TDEF()[k]:v;}
+const ALIAS=[['p',['价格','单价','报价']],['mx',['上限','最大','配比上限']],['d',['密度','比重','20℃密度']],['ron',['RON','ron','研究法','研究法辛烷值','辛烷值']],['mon',['MON','mon','马达法']],['rvp',['蒸汽压','蒸气压','RVP','rvp','气压']],['ole',['烯烃','烯']],['aro',['芳烃','芳含']],['bz',['苯含量','苯%','苯']],['s',['硫含量','总硫','硫']],['ox',['氧含量','氧']],['e110',['E110','e110']],['e190',['E190','e190']],['e70',['E70','e70']],['fbp',['终馏','干点','FBP','fbp']]];
+const CKEY=[[6,['二甲苯','混二甲']],[0,['催化','催汽','加氢汽油','FCC','fcc']],[1,['重整','芳烃油']],[2,['烷基','烷油']],[3,['MTBE','mtbe','甲基叔丁基','叔丁基醚']],[4,['异构']],[5,['抽余']],[7,['石脑','直馏','轻油']],[8,['89']]];
+function fld(t){for(const[f,as]of ALIAS)for(const a of as)if(t.includes(a))return f;return null;}
+function comp(t){for(let i=0;i<V.length;i++){const nm=NM(i);if(nm.length>=2&&t.includes(nm))return i;}
+ for(const[i,ks]of CKEY)for(const k of ks)if(t.includes(k))return i;return -1;}
+let PEND=null;
+function importData(){
+ const t=document.getElementById('imp').value,msg=document.getElementById('impMsg'),pv=document.getElementById('impPrev');
+ PEND=null;pv.innerHTML='';
+ const lines=t.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+ if(!lines.length){msg.textContent='没有内容';return;}
+ const cells=l=>l.includes('\t')?l.split('\t'):l.split(/[,，;；]+|\s{2,}|\s+/);
+ let hdr=null;
+ for(const l of lines){const cs=cells(l);let hits=0;cs.forEach(c=>{if(fld(c))hits++;});
+  if(hits>=3&&comp(l)<0){hdr=cs.map(c=>fld(c));break;}}
+ const recs={};
+ const put=(ci,f,v)=>{if(isNaN(v))return;recs[ci]=recs[ci]||{};recs[ci][f]=v;};
+ let anyComp=false;
+ for(const l of lines){
+  const ci=comp(l);
+  if(ci>=0){anyComp=true;
+   const cs=cells(l);
+   if(hdr){cs.forEach((c,j)=>{const f=hdr[j];if(f)put(ci,f,parseFloat(c.replace(/[^0-9.\-]/g,'')));});}
+   else{for(const[f,as]of ALIAS){for(const a of as){
+    const m=l.match(new RegExp(a+'[^0-9\\-]{0,6}(-?\\d+\\.?\\d*)'));
+    if(m){put(ci,f,parseFloat(m[1]));break;}}}}
+  }
+ }
+ if(!anyComp){
+  const ci=+document.getElementById('impTgt').value;
+  for(const l of lines){
+   for(const[f,as]of ALIAS){let done=false;
+    for(const a of as){const m=l.match(new RegExp(a+'[^0-9\\-]{0,8}(-?\\d+\\.?\\d*)'));
+     if(m){put(ci,f,parseFloat(m[1]));done=true;break;}}
+    if(done)break;}
+  }
+ }
+ const cis=Object.keys(recs);
+ if(!cis.length){msg.textContent='未识别到任何指标，检查格式或组分名';return;}
+ let html='<b style="color:var(--ink)">识别结果，请核对后确认：</b><br>';
+ cis.forEach(ci=>{const i=+ci;
+  html+='<span style="color:'+V[i].c+'">\u25cf</span> <b style="color:var(--ink)">'+NM(i)+'</b>\uff1a';
+  const parts=[];
+  for(const f in recs[ci]){const lb=(FLD.find(x=>x[0]===f)||[f,f])[1];
+   const ov=G(i,f),nv=recs[ci][f];
+   parts.push(lb+' '+(ov==nv?nv:(ov+'\u2192<b style="color:var(--oil)">'+nv+'</b>')));}
+  html+=parts.join('\uff0c')+'<br>';});
+ html+='<button class="btn" id="impOk" style="color:var(--ok);border-color:var(--ok)">确认导入</button> <button class="btn" id="impNo">取消</button>';
+ pv.innerHTML=html;msg.textContent='';
+ PEND=recs;
+ document.getElementById('impOk').onclick=()=>{
+  let n=0;for(const ci in PEND)for(const f in PEND[ci]){const e=document.getElementById('q'+ci+f);if(e){e.value=PEND[ci][f];n++;}}
+  pv.innerHTML='';msg.textContent='已写入 '+n+' 项，配方已重算';PEND=null;solve();
+  const de=document.getElementById('deci');if(de.innerHTML)de.innerHTML='数据已变，点「开始分析」重新计算';};
+ document.getElementById('impNo').onclick=()=>{pv.innerHTML='';msg.textContent='已取消，未做任何修改';PEND=null;};
+}
+let tmr;
+function solve(){
+ const g=+grade.value,sm=season.value==='s';
+ const ai=g===92?87:90,lo=sm?40:45,hi=sm?65:85;
+ const P=V.map((c,i)=>G(i,'p')),X=V.map((c,i)=>Math.max(0,G(i,'mx')));
+ const D=V.map((c,i)=>G(i,'d'));
+ const res=coreSolve(P,X,g,sm);
+ let x=res&&res.x,lam=res?res.cost:0;
+ if(!x){fail.style.display='block';cost.innerHTML=costL.innerHTML=dens.innerHTML='—';nbind.textContent='';specs.innerHTML='';
+  V.forEach((c,i)=>rb(i,0));document.getElementById('expl').innerHTML='';return;}
+ fail.style.display='none';
+ const dB=x.reduce((a,v,i)=>a+v/100*D[i],0);
+ cost.innerHTML=Math.round(lam).toLocaleString()+'<small>元/吨</small>';
+ costL.innerHTML=(lam*dB/1e6).toFixed(2)+'<small>元/升</small>';
+ dens.innerHTML=Math.round(dB)+'<small>kg/m³</small>';
+ {const raw=x.map(v=>Math.max(0,v)),tot=raw.reduce((a,b)=>a+b,0)||1;
+  const nm=raw.map(v=>v*100/tot),fl=nm.map(v=>Math.floor(v*10));
+  let rem=1000-fl.reduce((a,b)=>a+b,0);
+  const ord=nm.map((v,i)=>[v*10-fl[i],i]).sort((a,b)=>b[0]-a[0]);
+  for(let k=0;k<ord.length&&rem>0;k++,rem--)fl[ord[k][1]]++;
+  V.forEach((c,i)=>rb(i,fl[i]/10));}
+ const q=f=>x.reduce((a,v,i)=>a+v/100*G(i,f),0);
+ const qm=f=>x.reduce((a,v,i)=>a+v/100*D[i]*G(i,f),0)/dB;
+ const aiv=x.reduce((a,v,i)=>a+v/100*(G(i,'ron')+G(i,'mon'))/2,0);
+ const rvp=Math.pow(x.reduce((a,v,i)=>a+v/100*RI(G(i,'rvp')),0),1/1.25);
+ const fbp=Math.max(...V.map((c,i)=>x[i]>2?G(i,'fbp'):0));
+ const tv={ron:T('ron'),ai:T('ai'),ole:T('ole'),aro:T('aro'),bz:T('bz'),ox:T('ox'),s:T('s'),rlo:T('rlo'),rhi:T('rhi'),e70:T('e70'),e110:T('e110'),e190:T('e190'),fbp:T('fbp')};
+ const S=[['RON≥'+tv.ron,q('ron'),tv.ron,1],['抗爆≥'+tv.ai,aiv,tv.ai,1],['E70≥'+tv.e70,q('e70'),tv.e70,1],['E110≥'+tv.e110,q('e110'),tv.e110,1],['E190≥'+tv.e190,q('e190'),tv.e190,1],['终馏≤'+tv.fbp,fbp,tv.fbp,-1],['RVP '+tv.rlo+'-'+tv.rhi,rvp,0,0,tv.rlo,tv.rhi],['烯≤'+tv.ole,q('ole'),tv.ole,-1],['芳≤'+tv.aro,q('aro'),tv.aro,-1],['苯≤'+tv.bz,q('bz'),tv.bz,-1],['氧≤'+tv.ox,qm('ox'),tv.ox,-1],['硫≤'+tv.s,qm('s'),tv.s,-1]];
+ const bind=[];
+ specs.innerHTML=S.map(s=>{
+  const[n,v,l,d,slo,shi]=s;let p,e;
+  if(d===0){p=v>=slo-.05&&v<=shi+.05;e=Math.abs(v-slo)<.4||Math.abs(v-shi)<.4;}
+  else if(d===1){p=v>=l-.02;e=Math.abs(v-l)<l*.006+.05;}
+  else{p=v<=l+.02;e=Math.abs(v-l)<l*.02+.05;}
+  if(p&&e)bind.push(n.split(/[≥≤ ]/)[0]);
+  return`<span class="ch ${p?(e?'c-ed':'c-ok'):'c-bad'}">${n}｜${(+v).toFixed(l<5&&d!==0?2:1)}</span>`;
+ }).join('');
+ nbind.textContent=bind.length?'卡边：'+bind.join('、'):'';
+
+ {const tot=x.reduce((a,v,i)=>a+v*G(i,'d')*G(i,'p'),0);
+  const minP=Math.min(...V.map((c,i)=>x[i]>0.5?1e9:0).map((_,i)=>G(i,'p')));
+  let ex='';
+  V.forEach((c,i)=>{if(x[i]<0.5)return;
+   const ron=G(i,'ron'),ox=G(i,'ox'),pr=G(i,'p'),ole=G(i,'ole'),aro=G(i,'aro');
+   let role;
+   if(ox>10)role='含氧提辛烷';
+   else if(ron>=100)role='提辛烷值';
+   else if(ole<1.5&&aro<3)role='降烯烃芳烃稀释';
+   else role='低价打底';
+   const share=x[i]*G(i,'d')*pr/tot*100;
+   ex+='<span style="color:'+c.c+'">\u25cf</span> <b style="color:var(--ink)">'+c.k+'</b> '+x[i].toFixed(1)+'%\uff5c'+role+'\uff5c\u5360\u6210\u672c '+share.toFixed(1)+'%<br>';
+  });
+  ex+='<b style="color:var(--ink)">\u88c1\u5b9a\u903b\u8f91</b>\uff1a\u5355\u7eaf\u5f62\u6cd5\u5728\u6ee1\u8db3\u5168\u90e8\u76ee\u6807\u6307\u6807\u7684\u6240\u6709\u914d\u6bd4\u4e2d\u53d6\u5428\u6210\u672c\u6700\u5c0f\u89e3\uff1b\u5f53\u524d\u89e3\u5361\u8fb9\u4e8e\u300c'+(bind.length?bind.join('\u3001'):'\u65e0')+'\u300d\uff0c\u518d\u964d\u6210\u672c\u5fc5\u7834\u8fd9\u4e9b\u9650\u503c\u3002';
+  const nb=S.filter(s0=>{const[n,v,l,d,slo,shi]=s0;if(d===0)return!(v>=slo-.05&&v<=shi+.05);if(d===1)return v<l-.02;return v>l+.02;}).length;
+  ex+='<br><b style="color:var(--ink)">\u590d\u6838</b>\uff1a12\u9879\u6307\u6807 '+(nb?('<b style="color:var(--bad)">'+nb+' \u9879\u8d85\u9650</b>'):'<b style="color:var(--ok)">\u5168\u90e8\u5408\u683c</b>')+'\uff08\u9010\u9879\u89c1\u4e0b\u65b9\u5fbd\u7ae0\uff09\u3002';
+  document.getElementById('expl').innerHTML=ex;}
+ try{const out=V.map((c,i)=>{const o={k:NM(i)};FLD.forEach(([f])=>o[f]=G(i,f));return o;});localStorage.setItem(KEY,JSON.stringify(out));}catch(e){}
+}
+function rb(i,v){
+ document.getElementById('rb'+i).style.display=v>=.05?'block':'none';
+ document.getElementById('rf'+i).style.width=Math.min(100,v*1.6)+'%';
+ document.getElementById('rv'+i).textContent=v.toFixed(1)+'%';
+ if(i===V.length-1){let t=document.getElementById('rtot');
+  if(!t){t=document.createElement('div');t.id='rtot';t.style.cssText='font-size:12px;color:var(--i2);text-align:right;font-family:var(--mono)';rec.appendChild(t);}
+  let s=0;V.forEach((c,j)=>{const e=document.getElementById('rb'+j);if(e.style.display!=='none')s+=+document.getElementById('rv'+j).textContent.replace('%','');});
+  t.textContent='合计 '+s.toFixed(1)+'%';}
+}
+function deb(){clearTimeout(tmr);tmr=setTimeout(()=>{solve();const de=document.getElementById('deci');if(de.innerHTML)de.innerHTML='\u6570\u636e\u5df2\u53d8\uff0c\u70b9\u300c\u5f00\u59cb\u5206\u6790\u300d\u91cd\u65b0\u8ba1\u7b97';},220);}
+grade.onchange=season.onchange=()=>{setTgt();solve();};
+document.addEventListener('input',e=>{if(e.target&&e.target.id==='imp')return;if(e.target&&/^qk\d/.test(e.target.id))syncNames();deb();});
+document.getElementById('ana').onclick=analyse;
+document.getElementById('impBtn').onclick=importData;
+document.getElementById('rst').onclick=()=>{
+ if(!confirm('恢复全部默认值？你填的化验数据会被清掉'))return;
+ try{localStorage.removeItem(KEY);}catch(e){}
+ V.forEach((c,i)=>{document.getElementById('qk'+i).value=DEF[i].k;FLD.forEach(([f])=>{document.getElementById('q'+i+f).value=DEF[i][f];});});syncNames();
+ solve();
+};
+syncNames();
+setTgt();
+solve();
+</script>
+</body>
+</html>
